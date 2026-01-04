@@ -1,0 +1,166 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                     HƯỚNG DẪN SỬ DỤNG DOUYINVOICE PRO                        ║
+║                      Công cụ dịch video Douyin/TikTok                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📌 GIỚI THIỆU
+-------------
+DouyinVoice Pro giúp bạn:
+✅ Tải video từ Douyin/TikTok
+✅ Trích xuất giọng nói thành text (tiếng Trung)
+✅ Dịch sang tiếng Việt tự động
+✅ Tạo giọng đọc tiếng Việt
+✅ Ghép video với giọng Việt
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 BƯỚC 1: CÀI ĐẶT FFMPEG
+--------------------------
+⚠️ QUAN TRỌNG: Phải cài FFmpeg trước khi dùng tool!
+
+🔹 Cách 1: Cài tự động (KHUYẾN NGHỊ)
+   1. Nhấp đúp vào file "CAI_DAT_FFMPEG.bat"
+   2. Nhấn "Yes" khi Windows hỏi
+   3. Đợi cài đặt xong (khoảng 1-2 phút)
+   4. Thấy "Cài đặt thành công" là OK!
+
+🔹 Cách 2: Cài thủ công
+   1. Tải FFmpeg tại: https://github.com/BtbN/FFmpeg-Builds/releases
+   2. Chọn file "ffmpeg-master-latest-win64-gpl.zip"
+   3. Giải nén vào C:\ffmpeg
+   4. Thêm "C:\ffmpeg\bin" vào PATH (Google "thêm PATH Windows" nếu không biết)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 BƯỚC 2: CHẠY CHƯƠNG TRÌNH
+-----------------------------
+1. Nhấp đúp vào file "DouyinVoicePro.exe"
+2. Đợi chương trình khởi động (5-10 giây)
+3. Cửa sổ đăng nhập sẽ hiện ra
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔑 BƯỚC 3: ĐĂNG NHẬP
+---------------------
+1. Nhập License Key bạn đã mua (dạng: DVPRO-XXXX-XXXX-XXXX)
+2. Nhấn nút "Đăng nhập"
+3. Nếu thành công, cửa sổ chính sẽ hiện ra
+
+📌 Lưu ý:
+   • Mỗi license chỉ dùng cho 1 máy tính
+   • License có hạn sử dụng (kiểm tra thông tin gói)
+   • Có 3 gói: Basic (100 video/tháng), Pro (500 video/tháng), VIP (không giới hạn)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎬 BƯỚC 4: SỬ DỤNG CÔNG CỤ
+---------------------------
+
+📥 1. TẢI VIDEO
+   • Nhập link video Douyin hoặc TikTok
+   • Nhấn "Tải video"
+   • Đợi tải xong (hiện thanh xanh)
+
+🎙️ 2. TRÍCH TEXT (Tùy chọn)
+   • Nhấn "Trích text từ video"
+   • Đợi xử lý (dùng AI, mất 10-30 giây)
+   • Text tiếng Trung sẽ hiện ra
+
+🌐 3. DỊCH SANG TIẾNG VIỆT
+   • Nhập hoặc dán text cần dịch
+   • Nhấn "Dịch sang tiếng Việt"
+   • Text đã dịch sẽ hiện ra
+
+🔊 4. TẠO GIỌNG ĐỌC
+   • Chọn giọng đọc (Nam/Nữ, miền Bắc/Nam/Trung)
+   • Điều chỉnh tốc độ đọc (0.5 - 2.0)
+   • Nhấn "Tạo giọng đọc"
+   • File âm thanh sẽ được tạo
+
+🎞️ 5. GHÉP VIDEO
+   • Nhấn "Ghép video với giọng Việt"
+   • Chọn vị trí lưu file
+   • Đợi xử lý xong
+   • Video đã ghép giọng Việt sẽ được lưu
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 BƯỚC 5: XỬ LÝ LỖI THƯỜNG GẶP
+--------------------------------
+
+❌ LỖI: "Không kết nối được server"
+   ✅ Kiểm tra:
+      • Máy có internet không?
+      • Firewall/Antivirus có chặn không?
+      • Liên hệ hỗ trợ nếu vẫn lỗi
+
+❌ LỖI: "License không hợp lệ"
+   ✅ Kiểm tra:
+      • License Key nhập đúng chưa? (DVPRO-XXXX-XXXX-XXXX)
+      • License đã hết hạn chưa?
+      • Đã dùng trên máy khác chưa? (1 license = 1 máy)
+      • Liên hệ hỗ trợ để kiểm tra
+
+❌ LỖI: "FFmpeg not found" hoặc "Không tìm thấy FFmpeg"
+   ✅ Giải pháp:
+      • Chạy file "CAI_DAT_FFMPEG.bat" để cài FFmpeg
+      • Hoặc cài thủ công (xem Bước 1)
+      • Khởi động lại máy sau khi cài
+
+❌ LỖI: "Đã hết quota tháng này"
+   ✅ Giải pháp:
+      • Gói Basic: 100 video/tháng
+      • Gói Pro: 500 video/tháng
+      • Gói VIP: Không giới hạn
+      • Nâng cấp gói hoặc đợi reset tháng sau
+      • Liên hệ hỗ trợ để nâng cấp
+
+❌ LỖI: "Tải video thất bại"
+   ✅ Kiểm tra:
+      • Link video có đúng không? (Douyin hoặc TikTok)
+      • Video có bị xóa/riêng tư không?
+      • Thử link khác xem sao
+
+❌ LỖI: Tool chạy nhưng không hiện giao diện
+   ✅ Giải pháp:
+      • Xóa file "src/utils/.token" (nếu có)
+      • Chạy lại tool
+      • Đăng nhập lại
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📞 BƯỚC 6: LIÊN HỆ HỖ TRỢ
+--------------------------
+
+📱 Zalo: 0366468477
+💰 Momo: 0366468477
+⏰ Giờ hỗ trợ: 8:00 - 22:00 (tất cả các ngày)
+
+📌 Khi liên hệ, vui lòng cung cấp:
+   • License Key của bạn
+   • Mô tả lỗi gặp phải
+   • Screenshot nếu có
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 MẸO SỬ DỤNG
+---------------
+
+✨ Để có video chất lượng tốt:
+   • Dùng giọng phù hợp với nội dung (nữ cho thời trang, nam cho review...)
+   • Tốc độ 1.0 - 1.2 là dễ nghe nhất
+   • Kiểm tra bản dịch trước khi tạo giọng (sửa lỗi dịch nếu cần)
+
+✨ Tiết kiệm quota:
+   • Gói Basic: Dùng cho video quan trọng
+   • Gói Pro: Đủ cho người dùng thường xuyên
+   • Gói VIP: Dùng không giới hạn, phù hợp kinh doanh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 CHÚC BẠN SỬ DỤNG HIỆU QUẢ!
+
+Cảm ơn bạn đã tin tưởng sử dụng DouyinVoice Pro
+Nếu thấy hữu ích, hãy giới thiệu cho bạn bè nhé! 😊
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

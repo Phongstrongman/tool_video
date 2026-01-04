@@ -18,6 +18,10 @@ if sys.platform == 'win32':
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 # API Keys - Tier-based (MUST be set via environment variables in production)
 GROQ_API_KEY_BASIC = os.getenv("GROQ_API_KEY_BASIC", "your_groq_api_key_here")

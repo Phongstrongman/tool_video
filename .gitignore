@@ -1,38 +1,99 @@
-# Environment variables with secrets
-.env
+# ==========================================
+# DouyinVoice Pro - .gitignore
+# ==========================================
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# Python cache
+# === PYTHON ===
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual environment
-venv/
-env/
-ENV/
+# === VIRTUAL ENVIRONMENT ===
 .venv/
+venv/
+ENV/
+env/
+.env.local
 
-# IDE
+# === IDE & EDITORS ===
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
 
-# OS
+# === OS FILES ===
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+nul
 
-# Logs
+# === LOGS & TEMP ===
 *.log
+*.tmp
+*.bak
+*.cache
+
+# === PROJECT SPECIFIC ===
+# Temp and output contents (keep folders)
+temp/*
+!temp/.gitkeep
+output/*
+!output/.gitkeep
+
+# PyInstaller
+*.spec
+!build.spec
+*.manifest
+*.exe
 
 # Test files
 test_*.py
 tests/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Development plans
+plans/
+PHASE_*.md
+
+# License files (sensitive)
+license*.key
+*.key
+licenses.db
+
+# Environment files (secrets)
+.env
+!server/.env.example
+
+# Claude/AI tools cache
+.claude/
+
+# Backup files
+*.orig
+*_backup*
