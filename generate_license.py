@@ -150,6 +150,70 @@ def extend_license(license_key: str, days: int):
         print(f"❌ License not found: {license_key}")
 
 
+def list_suspicious_licenses():
+    """List licenses with suspicious activity"""
+    db = Database()
+
+    print("\n🚨 Suspicious License Activity Report")
+    print("=" * 100)
+
+    suspicious = db.get_suspicious_licenses()
+
+    if not suspicious:
+        print("\n✅ No suspicious activity detected!")
+        print("\nAll licenses are behaving normally.")
+        return
+
+    print(f"\nFound {len(suspicious)} suspicious license(s):\n")
+
+    table_data = []
+    for lic in suspicious:
+        # Format dates
+        if lic.get('last_ip_change'):
+            last_change = datetime.fromisoformat(lic['last_ip_change'])
+            hours_ago = (datetime.now() - last_change).total_seconds() / 3600
+            last_change_str = f"{hours_ago:.1f}h ago"
+        else:
+            last_change_str = "N/A"
+
+        # Determine warning reason
+        reasons = []
+        if lic.get('ip_changes', 0) > 5:
+            reasons.append(f"IP changed {lic['ip_changes']}x")
+        if lic.get('daily_usage', 0) > 50:
+            reasons.append(f"{lic['daily_usage']} videos/day")
+
+        reason_str = ", ".join(reasons) if reasons else "Unknown"
+
+        table_data.append([
+            lic['license_key'],
+            lic['tier'].upper(),
+            lic.get('last_ip', 'N/A'),
+            lic.get('ip_changes', 0),
+            lic.get('daily_usage', 0),
+            last_change_str,
+            lic['status'],
+            reason_str
+        ])
+
+    print(tabulate(
+        table_data,
+        headers=['License Key', 'Tier', 'Last IP', 'IP Changes (24h)', 'Daily Usage', 'Last Change', 'Status', 'Reason'],
+        tablefmt='grid'
+    ))
+
+    print(f"\n⚠️  Detection Rules:")
+    print(f"   • IP changes > 5 times in 24 hours → Suspicious")
+    print(f"   • Usage > 50 videos in one day → Suspicious")
+    print(f"   • Machine ID mismatch → Auto-blocked (not shown here)")
+
+    print(f"\n📋 Actions:")
+    print(f"   1. Contact the customer to verify activity")
+    print(f"   2. Suspend license: python generate_license.py update <KEY> --status suspended")
+    print(f"   3. Deactivate license: python generate_license.py update <KEY> --status inactive")
+    print("=" * 100)
+
+
 def main():
     parser = argparse.ArgumentParser(description="DouyinVoice Pro - License Generator")
 
@@ -176,6 +240,9 @@ def main():
     extend_parser.add_argument('license_key', type=str, help='License key to extend')
     extend_parser.add_argument('--days', type=int, required=True, help='Days to extend')
 
+    # Suspicious command
+    suspicious_parser = subparsers.add_parser('suspicious', help='Show licenses with suspicious activity')
+
     args = parser.parse_args()
 
     if args.command == 'generate':
@@ -186,6 +253,8 @@ def main():
         update_license_status(args.license_key, args.status)
     elif args.command == 'extend':
         extend_license(args.license_key, args.days)
+    elif args.command == 'suspicious':
+        list_suspicious_licenses()
     else:
         parser.print_help()
 
@@ -206,6 +275,8 @@ if __name__ == "__main__":
         print("  python generate_license.py generate --days 30 --tier vip")
         print("\n  # List all licenses")
         print("  python generate_license.py list")
+        print("\n  # Show suspicious licenses")
+        print("  python generate_license.py suspicious")
         print("\n  # Update license status")
         print("  python generate_license.py update DVPRO-XXXX-XXXX-XXXX --status inactive")
         print("\n  # Extend license")

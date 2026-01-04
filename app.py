@@ -10,7 +10,7 @@ FastAPI server that:
 Run:
     uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 """
-from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -109,9 +109,12 @@ class TranslateResponse(BaseModel):
 
 # ===== Dependency: Verify Token =====
 
-async def verify_token_header(authorization: Optional[str] = Header(None)) -> tuple:
+async def verify_token_header(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+) -> tuple:
     """
-    Verify token from Authorization header
+    Verify token from Authorization header and track IP usage
 
     Returns:
         tuple (license_key, license_data) if valid
@@ -140,7 +143,22 @@ async def verify_token_header(authorization: Optional[str] = Header(None)) -> tu
     if not valid:
         raise HTTPException(status_code=403, detail=f"License invalid: {message}")
 
-    logger.info(f"Request from license: {license_key} (tier: {license_data.get('tier', 'basic')})")
+    # Extract IP address
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Check for proxy headers
+    if "x-forwarded-for" in request.headers:
+        client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
+    elif "x-real-ip" in request.headers:
+        client_ip = request.headers["x-real-ip"]
+
+    # Track IP usage and detect suspicious activity
+    is_suspicious, sus_message = db.track_ip_usage(license_key, client_ip)
+
+    if is_suspicious:
+        logger.warning(f"SUSPICIOUS ACTIVITY: {license_key} - {sus_message} (IP: {client_ip})")
+
+    logger.info(f"Request from license: {license_key} (tier: {license_data.get('tier', 'basic')}, IP: {client_ip})")
     return license_key, license_data
 
 
@@ -415,6 +433,49 @@ async def list_licenses(admin_key: str):
 
     licenses = db.list_licenses()
     return {"licenses": licenses}
+
+
+@app.get("/api/admin/suspicious")
+async def get_suspicious_licenses(admin_key: str = None):
+    """
+    Get list of licenses with suspicious activity
+
+    Detection rules:
+    - IP changes > 5 times in 24 hours
+    - Usage > 50 videos in one day
+    - Machine ID mismatch (handled separately)
+
+    Query params:
+        admin_key: Server admin key for authentication
+    """
+    if admin_key != SERVER_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    suspicious = db.get_suspicious_licenses()
+
+    return {
+        "success": True,
+        "count": len(suspicious),
+        "suspicious_licenses": suspicious,
+        "message": f"Found {len(suspicious)} suspicious license(s)"
+    }
+
+
+@app.post("/api/admin/clear-suspicious/{license_key}")
+async def clear_suspicious_flag(license_key: str, admin_key: str):
+    """Clear suspicious flag from a license (admin only)"""
+    if admin_key != SERVER_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    success = db.clear_suspicious_flag(license_key)
+
+    if success:
+        return {
+            "success": True,
+            "message": f"Cleared suspicious flag for {license_key}"
+        }
+    else:
+        raise HTTPException(status_code=404, detail="License not found")
 
 
 # ===== Startup Event =====

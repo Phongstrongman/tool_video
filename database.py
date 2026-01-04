@@ -38,7 +38,13 @@ class Database:
                 tier TEXT NOT NULL DEFAULT 'basic' CHECK(tier IN ('basic', 'pro', 'vip')),
                 monthly_limit INTEGER NOT NULL DEFAULT 100,
                 videos_used INTEGER NOT NULL DEFAULT 0,
-                reset_date TEXT NOT NULL
+                reset_date TEXT NOT NULL,
+                last_ip TEXT,
+                ip_changes INTEGER NOT NULL DEFAULT 0,
+                last_ip_change TEXT,
+                daily_usage INTEGER NOT NULL DEFAULT 0,
+                daily_usage_date TEXT,
+                is_suspicious INTEGER NOT NULL DEFAULT 0
             )
         """)
 
@@ -483,3 +489,146 @@ class Database:
             "videos_remaining": videos_remaining,
             "reset_date": reset_date
         }
+
+    def track_ip_usage(self, license_key: str, ip_address: str) -> tuple[bool, str]:
+        """
+        Track IP address usage and detect suspicious activity
+
+        Returns:
+            Tuple of (is_suspicious, message)
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Get current IP tracking data
+        cursor.execute("""
+            SELECT last_ip, ip_changes, last_ip_change, daily_usage, daily_usage_date
+            FROM licenses
+            WHERE license_key = ?
+        """, (license_key,))
+
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return False, "License not found"
+
+        last_ip, ip_changes, last_ip_change, daily_usage, daily_usage_date = result
+        now = datetime.now()
+        is_suspicious = False
+        message = "OK"
+
+        # Reset daily usage if new day
+        if daily_usage_date:
+            last_date = datetime.fromisoformat(daily_usage_date).date()
+            if last_date < now.date():
+                daily_usage = 0
+                daily_usage_date = now.isoformat()
+        else:
+            daily_usage_date = now.isoformat()
+
+        # Increment daily usage
+        daily_usage += 1
+
+        # Check for suspicious daily usage (> 50 videos in one day)
+        if daily_usage > 50:
+            is_suspicious = True
+            message = f"Suspicious: {daily_usage} videos in one day"
+
+        # Track IP changes
+        if last_ip and last_ip != ip_address:
+            # IP changed - check if within 24 hours
+            if last_ip_change:
+                last_change = datetime.fromisoformat(last_ip_change)
+                hours_since_change = (now - last_change).total_seconds() / 3600
+
+                if hours_since_change < 24:
+                    # Within 24 hours - increment counter
+                    ip_changes += 1
+
+                    # Check if too many changes
+                    if ip_changes > 5:
+                        is_suspicious = True
+                        message = f"Suspicious: IP changed {ip_changes} times in 24 hours"
+                else:
+                    # More than 24 hours - reset counter
+                    ip_changes = 1
+            else:
+                # First IP change
+                ip_changes = 1
+
+            last_ip_change = now.isoformat()
+            last_ip = ip_address
+
+        elif not last_ip:
+            # First time using - set IP
+            last_ip = ip_address
+            last_ip_change = now.isoformat()
+            ip_changes = 0
+
+        # Update database
+        cursor.execute("""
+            UPDATE licenses
+            SET last_ip = ?,
+                ip_changes = ?,
+                last_ip_change = ?,
+                daily_usage = ?,
+                daily_usage_date = ?,
+                is_suspicious = ?
+            WHERE license_key = ?
+        """, (last_ip, ip_changes, last_ip_change, daily_usage, daily_usage_date,
+              1 if is_suspicious else 0, license_key))
+
+        conn.commit()
+        conn.close()
+
+        return is_suspicious, message
+
+    def get_suspicious_licenses(self) -> List[Dict]:
+        """Get all licenses flagged as suspicious"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT license_key, last_ip, ip_changes, daily_usage,
+                   daily_usage_date, last_ip_change, tier, status
+            FROM licenses
+            WHERE is_suspicious = 1
+            ORDER BY daily_usage DESC, ip_changes DESC
+        """)
+
+        results = cursor.fetchall()
+        conn.close()
+
+        licenses = []
+        for row in results:
+            licenses.append({
+                "license_key": row[0],
+                "last_ip": row[1],
+                "ip_changes": row[2],
+                "daily_usage": row[3],
+                "daily_usage_date": row[4],
+                "last_ip_change": row[5],
+                "tier": row[6],
+                "status": row[7]
+            })
+
+        return licenses
+
+    def clear_suspicious_flag(self, license_key: str) -> bool:
+        """Clear suspicious flag from a license"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE licenses
+            SET is_suspicious = 0,
+                ip_changes = 0,
+                daily_usage = 0
+            WHERE license_key = ?
+        """, (license_key,))
+
+        updated = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+
+        return updated
