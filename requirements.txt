@@ -1,0 +1,29 @@
+# DouyinVoice Pro Server - Dependencies
+# Python 3.8+ required
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Database
+# sqlite3 is built-in with Python, no need to install
+
+# CLI utilities
+tabulate>=0.9.0  # For license list tables
+
+# Authentication & Security
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.6
+
+# API Clients
+groq>=0.4.0                  # Groq API for STT
+google-generativeai>=0.3.0   # Gemini API for TTS
+requests>=2.31.0             # HTTP requests
+deep-translator>=1.11.4      # Translation
+
+# Utilities
+python-dotenv>=1.0.0         # Environment variables
+pydantic>=2.0.0              # Data validation
+
+# Optional: Production server
+gunicorn>=21.2.0             # Production WSGI server
