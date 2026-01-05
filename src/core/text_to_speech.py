@@ -76,7 +76,8 @@ class TextToSpeech:
     }
 
     # Gioi han ky tu cho moi chunk
-    MAX_CHUNK_SIZE = 500
+    # Tang len 1500 de giong doc lien mach hon, it bi ngat quang
+    MAX_CHUNK_SIZE = 1500
 
     # Map ten giong UI sang API format
     UI_TO_GEMINI_VOICE = {
@@ -482,16 +483,38 @@ class TextToSpeech:
                         progress = int((completed / total_chunks) * 80) + 10
                         progress_callback(progress)
 
-            # Kiem tra chunks that bai
+            # Kiem tra chunks that bai va RETRY LAI
             if failed_chunks:
                 failed_count = len(failed_chunks)
                 total = total_chunks
-                print(f"[TTS] WARNING: {failed_count}/{total} chunks that bai")
+                print(f"[TTS] WARNING: {failed_count}/{total} chunks that bai, dang retry...")
 
-                # Neu qua nhieu chunks that bai (>50%), bao loi
-                if failed_count > total * 0.5:
-                    failed_ids = [str(idx) for idx, _ in failed_chunks[:5]]
-                    raise Exception(f"Qua nhieu chunks that bai ({failed_count}/{total}): {', '.join(failed_ids)}...")
+                # RETRY cac chunks that bai - QUAN TRONG de khong mat audio
+                for idx, error in failed_chunks:
+                    print(f"[TTS] Retry chunk {idx}...")
+                    retry_success = False
+
+                    # Thu 3 lan voi Edge TTS (stable hon)
+                    for retry in range(3):
+                        try:
+                            time.sleep(1.0 + retry * 0.5)  # Tang delay moi lan retry
+                            self._run_async_tts(chunks[idx], "vi-VN-HoaiMyNeural", "+0%", chunk_paths[idx])
+
+                            if os.path.exists(chunk_paths[idx]) and os.path.getsize(chunk_paths[idx]) > 500:
+                                print(f"[TTS] Chunk {idx}: RETRY THANH CONG (lan {retry + 1})")
+                                results[idx] = (chunk_paths[idx], True)
+                                retry_success = True
+                                break
+                        except Exception as e:
+                            print(f"[TTS] Chunk {idx}: Retry {retry + 1} that bai: {e}")
+
+                    if not retry_success:
+                        print(f"[TTS] Chunk {idx}: THAT BAI HOAN TOAN sau 3 lan retry")
+
+                # Dem lai so chunks that bai sau retry
+                final_failed = sum(1 for i in range(total_chunks) if i not in results or not results[i][1])
+                if final_failed > total * 0.3:  # Giam nguong xuong 30%
+                    raise Exception(f"Qua nhieu chunks that bai ({final_failed}/{total}) sau retry")
 
             # Sap xep lai theo thu tu INDEX, chi lay chunks thanh cong
             # QUAN TRONG: Phai giu dung thu tu 0, 1, 2, 3... de audio khong bi dao
@@ -501,6 +524,10 @@ class TextToSpeech:
                     file_path = results[i][0]
                     if os.path.exists(file_path) and os.path.getsize(file_path) > 500:
                         temp_files.append((i, file_path))  # Luu ca index
+                    else:
+                        print(f"[TTS] WARNING: Chunk {i} file khong hop le, bo qua")
+                else:
+                    print(f"[TTS] WARNING: Chunk {i} khong co ket qua, bo qua")
 
             # Sap xep theo index de dam bao thu tu
             temp_files.sort(key=lambda x: x[0])
@@ -508,6 +535,11 @@ class TextToSpeech:
 
             if not ordered_files:
                 raise Exception("Khong tao duoc bat ky chunk audio nao!")
+
+            # Canh bao neu bi mat chunks
+            if len(ordered_files) < total_chunks:
+                missing = total_chunks - len(ordered_files)
+                print(f"[TTS] CANH BAO: Mat {missing}/{total_chunks} chunks - audio co the bi ngat quang!")
 
             print(f"[TTS] Ghep {len(ordered_files)} chunks theo thu tu: {[t[0] for t in temp_files]}")
 
@@ -612,36 +644,58 @@ class TextToSpeech:
         return final_chunks if final_chunks else [sentence]
 
     def _concat_audio_files(self, input_files: List[str], output_path: str):
-        """Ghep nhieu file audio thanh 1 file bang FFmpeg"""
+        """Ghep nhieu file audio thanh 1 file bang FFmpeg - FIX CHO WINDOWS"""
         if len(input_files) == 1:
             import shutil
             shutil.copy(input_files[0], output_path)
             return
 
-        # Tao file list cho FFmpeg concat
+        # Neu chi co 2-3 files, dung crossfade de muot hon
+        if len(input_files) <= 3:
+            self._concat_with_crossfade(input_files, output_path)
+            return
+
+        # Neu nhieu files, dung concat thong thuong (nhanh hon)
         list_filename = f"concat_list_{uuid.uuid4().hex[:8]}.txt"
         list_path = str(self.temp_dir / list_filename)
+
+        print(f"[TTS] Ghep {len(input_files)} file audio...")
 
         try:
             with open(list_path, 'w', encoding='utf-8') as f:
                 for file_path in input_files:
-                    escaped_path = file_path.replace("'", "'\\''")
-                    f.write(f"file '{escaped_path}'\n")
+                    # QUAN TRONG: Tren Windows, phai dung forward slash / hoac escape backslash
+                    # FFmpeg concat demuxer can forward slash
+                    normalized_path = file_path.replace('\\', '/')
+                    f.write(f"file '{normalized_path}'\n")
 
             cmd = [
                 'ffmpeg', '-y',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', list_path,
-                '-c', 'copy',
+                '-c:a', 'libmp3lame',
+                '-b:a', '192k',
                 output_path
             ]
 
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 capture_output=True,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
+
+            # Kiem tra ket qua
+            if result.returncode != 0:
+                error_msg = result.stderr.decode() if result.stderr else "Unknown error"
+                print(f"[TTS] FFmpeg concat error: {error_msg}")
+                # Fallback: Thu ghep tung file mot
+                self._concat_sequential(input_files, output_path)
+            elif not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+                print(f"[TTS] Concat output invalid, trying sequential merge...")
+                self._concat_sequential(input_files, output_path)
+            else:
+                print(f"[TTS] Concat thanh cong: {os.path.getsize(output_path) / 1024:.1f} KB")
 
         finally:
             try:
@@ -649,6 +703,93 @@ class TextToSpeech:
                     os.unlink(list_path)
             except:
                 pass
+
+    def _concat_sequential(self, input_files: List[str], output_path: str):
+        """Ghep file tuan tu - FALLBACK khi concat list fail"""
+        import shutil
+
+        print(f"[TTS] Fallback: Ghep {len(input_files)} file tuan tu...")
+
+        # Ghep tung cap file mot
+        temp_output = None
+        current_input = input_files[0]
+
+        for i, next_file in enumerate(input_files[1:], 1):
+            temp_output = str(self.temp_dir / f"concat_temp_{i}.mp3")
+
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', current_input,
+                '-i', next_file,
+                '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[out]',
+                '-map', '[out]',
+                '-c:a', 'libmp3lame',
+                '-b:a', '192k',
+                temp_output
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+
+            if result.returncode != 0:
+                print(f"[TTS] Sequential concat {i} failed: {result.stderr.decode()[:200]}")
+                # Neu fail, copy file hien tai
+                if os.path.exists(current_input):
+                    shutil.copy(current_input, output_path)
+                return
+
+            # Xoa temp truoc do (neu khong phai file goc)
+            if i > 1 and os.path.exists(current_input) and 'concat_temp' in current_input:
+                try:
+                    os.unlink(current_input)
+                except:
+                    pass
+
+            current_input = temp_output
+            print(f"[TTS] Ghep {i}/{len(input_files)-1} xong")
+
+        # Copy ket qua cuoi cung
+        if temp_output and os.path.exists(temp_output):
+            shutil.copy(temp_output, output_path)
+            try:
+                os.unlink(temp_output)
+            except:
+                pass
+            print(f"[TTS] Sequential concat hoan thanh: {os.path.getsize(output_path) / 1024:.1f} KB")
+
+    def _concat_with_crossfade(self, input_files: List[str], output_path: str):
+        """Ghep audio voi crossfade 50ms de giong muot hon"""
+        if len(input_files) == 2:
+            # 2 files: crossfade truc tiep
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', input_files[0],
+                '-i', input_files[1],
+                '-filter_complex', '[0][1]acrossfade=d=0.05:c1=tri:c2=tri',
+                '-c:a', 'libmp3lame', '-b:a', '192k',
+                output_path
+            ]
+        else:
+            # 3 files: crossfade tung cap
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', input_files[0],
+                '-i', input_files[1],
+                '-i', input_files[2],
+                '-filter_complex',
+                '[0][1]acrossfade=d=0.05:c1=tri:c2=tri[a01];[a01][2]acrossfade=d=0.05:c1=tri:c2=tri',
+                '-c:a', 'libmp3lame', '-b:a', '192k',
+                output_path
+            ]
+
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
 
     def _run_async_tts(self, text: str, voice: str, rate: str, output_path: str):
         """Chay async TTS voi timeout tang"""
