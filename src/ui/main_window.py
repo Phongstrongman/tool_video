@@ -103,7 +103,8 @@ class MainWindow(QMainWindow):
         """Tao tab xu ly chinh"""
         tab = QWidget()
         layout = QHBoxLayout(tab)
-        layout.setSpacing(15)
+        layout.setSpacing(20)  # Increase spacing between left and right panels
+        layout.setContentsMargins(10, 10, 10, 10)  # Add margins
 
         # Left panel - Input
         left = self._create_input_panel()
@@ -121,10 +122,10 @@ class MainWindow(QMainWindow):
         panel.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                border: 1px solid #3d3d3d;
+                border: 2px solid #3d3d3d;
                 border-radius: 8px;
                 margin-top: 10px;
-                padding-top: 10px;
+                padding-top: 15px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -134,7 +135,8 @@ class MainWindow(QMainWindow):
             }
         """)
         layout = QVBoxLayout(panel)
-        layout.setSpacing(10)
+        layout.setSpacing(15)  # Increase spacing between sections
+        layout.setContentsMargins(10, 20, 10, 10)  # Add proper margins
 
         # Video input
         video_group = QFrame()
@@ -163,7 +165,22 @@ class MainWindow(QMainWindow):
 
         # Step 1: Extract audio
         step1 = QGroupBox("Buoc 1: Trich xuat audio")
+        step1.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         step1_layout = QVBoxLayout(step1)
+        step1_layout.setSpacing(8)
+        step1_layout.setContentsMargins(10, 15, 10, 10)
 
         self.btn_extract = QPushButton("Trich Xuat Audio")
         self.btn_extract.setStyleSheet("""
@@ -200,7 +217,22 @@ class MainWindow(QMainWindow):
 
         # Step 2: Speech to text
         step2 = QGroupBox("Buoc 2: Chuyen giong noi thanh van ban")
+        step2.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         step2_layout = QVBoxLayout(step2)
+        step2_layout.setSpacing(8)
+        step2_layout.setContentsMargins(10, 15, 10, 10)
 
         # STT Engine selection
         stt_row = QHBoxLayout()
@@ -247,7 +279,21 @@ class MainWindow(QMainWindow):
 
         # Original text
         text_group = QGroupBox("Van ban goc (Tieng Trung)")
+        text_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         text_layout = QVBoxLayout(text_group)
+        text_layout.setContentsMargins(10, 15, 10, 10)
 
         self.text_original = QTextEdit()
         self.text_original.setPlaceholderText("Van ban goc se hien thi o day...")
@@ -259,7 +305,7 @@ class MainWindow(QMainWindow):
                 padding: 10px;
             }
         """)
-        self.text_original.setMinimumHeight(150)
+        self.text_original.setMinimumHeight(120)
         text_layout.addWidget(self.text_original)
 
         layout.addWidget(text_group)
@@ -274,10 +320,10 @@ class MainWindow(QMainWindow):
         panel.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                border: 1px solid #3d3d3d;
+                border: 2px solid #3d3d3d;
                 border-radius: 8px;
                 margin-top: 10px;
-                padding-top: 10px;
+                padding-top: 15px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -287,11 +333,27 @@ class MainWindow(QMainWindow):
             }
         """)
         layout = QVBoxLayout(panel)
-        layout.setSpacing(10)
+        layout.setSpacing(15)  # Increase spacing between sections
+        layout.setContentsMargins(10, 20, 10, 10)  # Add proper margins
 
         # Step 3: Translate
         step3 = QGroupBox("Buoc 3: Dich sang tieng Viet")
+        step3.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         step3_layout = QVBoxLayout(step3)
+        step3_layout.setSpacing(8)
+        step3_layout.setContentsMargins(10, 15, 10, 10)
 
         self.btn_translate = QPushButton("Dich Van Ban")
         self.btn_translate.setStyleSheet("""
@@ -329,7 +391,21 @@ class MainWindow(QMainWindow):
 
         # Translated text
         text_group = QGroupBox("Van ban dich (Tieng Viet)")
+        text_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         text_layout = QVBoxLayout(text_group)
+        text_layout.setContentsMargins(10, 15, 10, 10)
 
         self.text_translated = QTextEdit()
         self.text_translated.setPlaceholderText("Van ban dich se hien thi o day...")
@@ -341,18 +417,36 @@ class MainWindow(QMainWindow):
                 padding: 10px;
             }
         """)
-        self.text_translated.setMinimumHeight(150)
+        self.text_translated.setMinimumHeight(120)
         text_layout.addWidget(self.text_translated)
 
         layout.addWidget(text_group)
 
         # Step 4: TTS
         step4 = QGroupBox("Buoc 4: Tao giong noi")
+        step4.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         step4_layout = QVBoxLayout(step4)
+        step4_layout.setSpacing(8)
+        step4_layout.setContentsMargins(10, 15, 10, 10)
 
         # TTS Engine
         tts_row = QHBoxLayout()
-        tts_row.addWidget(QLabel("Engine:"))
+        tts_row.setSpacing(10)
+        lbl_engine = QLabel("Engine:")
+        lbl_engine.setMinimumWidth(60)
+        tts_row.addWidget(lbl_engine)
         self.combo_tts = QComboBox()
         self.combo_tts.addItems(["Gemini TTS", "Edge TTS"])
         self.combo_tts.setStyleSheet("padding: 8px;")
@@ -362,7 +456,10 @@ class MainWindow(QMainWindow):
 
         # Voice selection
         voice_row = QHBoxLayout()
-        voice_row.addWidget(QLabel("Giong:"))
+        voice_row.setSpacing(10)
+        lbl_voice = QLabel("Giong:")
+        lbl_voice.setMinimumWidth(60)
+        voice_row.addWidget(lbl_voice)
         self.combo_voice = QComboBox()
         self._update_voice_list()
         self.combo_voice.setStyleSheet("padding: 8px;")
@@ -371,7 +468,10 @@ class MainWindow(QMainWindow):
 
         # Speed control
         speed_row = QHBoxLayout()
-        speed_row.addWidget(QLabel("Toc do:"))
+        speed_row.setSpacing(10)
+        lbl_speed = QLabel("Toc do:")
+        lbl_speed.setMinimumWidth(60)
+        speed_row.addWidget(lbl_speed)
         self.slider_speed = QSlider(Qt.Orientation.Horizontal)
         self.slider_speed.setMinimum(50)
         self.slider_speed.setMaximum(200)
@@ -380,6 +480,7 @@ class MainWindow(QMainWindow):
         self.slider_speed.setTickInterval(25)
         speed_row.addWidget(self.slider_speed, 1)
         self.label_speed = QLabel("1.0x")
+        self.label_speed.setMinimumWidth(40)
         speed_row.addWidget(self.label_speed)
         self.slider_speed.valueChanged.connect(
             lambda v: self.label_speed.setText(f"{v/100:.1f}x")
@@ -422,11 +523,29 @@ class MainWindow(QMainWindow):
 
         # Step 5: Export
         step5 = QGroupBox("Buoc 5: Xuat video")
+        step5.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
         step5_layout = QVBoxLayout(step5)
+        step5_layout.setSpacing(8)
+        step5_layout.setContentsMargins(10, 15, 10, 10)
 
         # Output name
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Ten file:"))
+        name_row.setSpacing(10)
+        lbl_filename = QLabel("Ten file:")
+        lbl_filename.setMinimumWidth(60)
+        name_row.addWidget(lbl_filename)
         self.input_output_name = QLineEdit()
         self.input_output_name.setPlaceholderText("Ten file xuat...")
         self.input_output_name.setStyleSheet("padding: 8px;")
