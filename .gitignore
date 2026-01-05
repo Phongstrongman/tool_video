@@ -57,6 +57,14 @@ nul
 *.bak
 *.cache
 
+# === DOCUMENTATION (auto-generated) ===
+FIXES_APPLIED.md
+INTRO_OPTIMIZATIONS.md
+STT_SPEED_OPTIMIZATION.md
+TTS_FALLBACK_IMPROVEMENTS.md
+VIDEO_EXPORT_CRASH_FIXES.md
+check_logs.bat
+
 # === PROJECT SPECIFIC ===
 # Temp and output contents (keep folders)
 temp/*
@@ -90,6 +98,11 @@ licenses.db
 # Environment files (secrets)
 .env
 !server/.env.example
+settings.json
+
+# Token files
+src/utils/.token
+*.token
 
 # Claude/AI tools cache
 .claude/

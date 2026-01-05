@@ -41,7 +41,7 @@ class LoginDialog(QDialog):
         main_layout.setSpacing(20)
 
         # ===== TITLE =====
-        title_label = QLabel("🔐 ĐĂNG NHẬP")
+        title_label = QLabel("[LOGIN] DANG NHAP")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_font = QFont("Segoe UI", 18, QFont.Weight.Bold)
         title_label.setFont(title_font)
@@ -49,23 +49,23 @@ class LoginDialog(QDialog):
         main_layout.addWidget(title_label)
 
         # ===== SERVER STATUS =====
-        server_group = QGroupBox("📡 Trạng thái Server")
+        server_group = QGroupBox("[SERVER] Trang thai Server")
         server_layout = QVBoxLayout()
 
         # Check server health
         is_healthy, health_data = self.api_client.health_check()
 
         if is_healthy:
-            status_label = QLabel(f"✅ Server đang hoạt động\n🌐 {self.api_client.server_url}")
+            status_label = QLabel(f"[OK] Server dang hoat dong\n[URL] {self.api_client.server_url}")
             status_label.setStyleSheet("color: #a6e3a1; font-size: 13px;")
         else:
             status_label = QLabel(
-                f"❌ Không thể kết nối server\n"
-                f"🌐 {self.api_client.server_url}\n\n"
-                f"Vui lòng kiểm tra:\n"
-                f"1. Server đang chạy?\n"
-                f"2. URL trong src/utils/config.py đúng chưa?\n"
-                f"3. Có internet không?"
+                f"[X] Khong the ket noi server\n"
+                f"[URL] {self.api_client.server_url}\n\n"
+                f"Vui long kiem tra:\n"
+                f"1. Server dang chay?\n"
+                f"2. URL trong src/utils/config.py dung chua?\n"
+                f"3. Co internet khong?"
             )
             status_label.setStyleSheet("color: #f38ba8; font-size: 12px;")
 
@@ -76,12 +76,12 @@ class LoginDialog(QDialog):
         main_layout.addWidget(server_group)
 
         # ===== LICENSE INPUT =====
-        license_group = QGroupBox("🔑 Nhập License Key")
+        license_group = QGroupBox("[KEY] Nhap License Key")
         license_layout = QVBoxLayout()
 
         instruction = QLabel(
-            "Nhập license key để sử dụng DouyinVoice Pro.\n"
-            "License key có dạng: DVPRO-XXXX-XXXX-XXXX"
+            "Nhap license key de su dung DouyinVoice Pro.\n"
+            "License key co dang: DVPRO-XXXX-XXXX-XXXX"
         )
         instruction.setWordWrap(True)
         instruction.setStyleSheet("font-size: 12px; padding: 5px;")
@@ -100,17 +100,17 @@ class LoginDialog(QDialog):
         main_layout.addWidget(license_group)
 
         # ===== PURCHASE INFO =====
-        purchase_group = QGroupBox("💰 Bảng Giá")
+        purchase_group = QGroupBox("[PRICE] Bang Gia")
         purchase_layout = QVBoxLayout()
 
         purchase_info = QLabel(
-            "📌 GIÁ:\n"
-            "   • Basic: 50.000đ (100 videos/tháng)\n"
-            "   • Pro: 150.000đ (500 videos/tháng)\n"
-            "   • VIP: 300.000đ (Không giới hạn)\n\n"
-            "📞 Liên hệ:\n"
-            "   • Zalo: 0366468477\n"
-            "   • Momo: 0366468477"
+            "[INFO] GIA:\n"
+            "   - Basic: 50.000d (100 videos/thang)\n"
+            "   - Pro: 150.000d (500 videos/thang)\n"
+            "   - VIP: 300.000d (Khong gioi han)\n\n"
+            "[CONTACT] Lien he:\n"
+            "   - Zalo: 0366468477\n"
+            "   - Momo: 0366468477"
         )
         purchase_info.setStyleSheet("font-size: 12px;")
         purchase_layout.addWidget(purchase_info)
@@ -123,7 +123,7 @@ class LoginDialog(QDialog):
         button_layout.setSpacing(10)
 
         # Login button
-        self.login_btn = QPushButton("✅ ĐĂNG NHẬP")
+        self.login_btn = QPushButton("[OK] DANG NHAP")
         self.login_btn.setStyleSheet(
             """
             QPushButton {
@@ -151,7 +151,7 @@ class LoginDialog(QDialog):
         button_layout.addWidget(self.login_btn)
 
         # Cancel button
-        self.cancel_btn = QPushButton("❌ HỦY")
+        self.cancel_btn = QPushButton("[X] HUY")
         self.cancel_btn.setStyleSheet(
             """
             QPushButton {
@@ -177,7 +177,7 @@ class LoginDialog(QDialog):
 
         # ===== HELP TEXT =====
         help_label = QLabel(
-            "💡 Chưa có license? Liên hệ Zalo/Momo: 0366468477"
+            "[TIP] Chua co license? Lien he Zalo/Momo: 0366468477"
         )
         help_label.setWordWrap(True)
         help_label.setStyleSheet(
@@ -196,14 +196,14 @@ class LoginDialog(QDialog):
         if not license_key:
             QMessageBox.warning(
                 self,
-                "Thiếu thông tin",
-                "Vui lòng nhập license key!"
+                "Thieu thong tin",
+                "Vui long nhap license key!"
             )
             return
 
         # Disable button during login
         self.login_btn.setEnabled(False)
-        self.login_btn.setText("⏳ Đang đăng nhập...")
+        self.login_btn.setText("[LOADING] Dang dang nhap...")
 
         # Generate machine ID (simple UUID)
         machine_id = str(uuid.uuid4())
@@ -213,7 +213,7 @@ class LoginDialog(QDialog):
 
         # Re-enable button
         self.login_btn.setEnabled(True)
-        self.login_btn.setText("✅ ĐĂNG NHẬP")
+        self.login_btn.setText("[OK] DANG NHAP")
 
         if success:
             # Show success message with tier info
@@ -231,13 +231,13 @@ class LoginDialog(QDialog):
 
             QMessageBox.information(
                 self,
-                "Đăng nhập thành công",
-                f"🎉 Đăng nhập thành công!\n\n"
-                f"📦 Gói: {tier}\n"
-                f"📊 Còn lại tháng này: {remaining_str}\n"
-                f"📅 Reset: {reset_date}\n"
-                f"⏰ Hết hạn: {days_left} ngày\n\n"
-                f"Bạn có thể bắt đầu sử dụng DouyinVoice Pro!"
+                "Dang nhap thanh cong",
+                f"[SUCCESS] Dang nhap thanh cong!\n\n"
+                f"[PRODUCT] Goi: {tier}\n"
+                f"[STATS] Con lai thang nay: {remaining_str}\n"
+                f"[DATE] Reset: {reset_date}\n"
+                f"[TIME] Het han: {days_left} ngay\n\n"
+                f"Ban co the bat dau su dung DouyinVoice Pro!"
             )
             self.is_logged_in = True
             self.accept()
@@ -245,10 +245,10 @@ class LoginDialog(QDialog):
             # Show error
             QMessageBox.critical(
                 self,
-                "Đăng nhập thất bại",
-                f"❌ Không thể đăng nhập!\n\n"
-                f"Lỗi: {message}\n\n"
-                f"Vui lòng kiểm tra lại license key hoặc liên hệ:\n"
+                "Dang nhap that bai",
+                f"[X] Khong the dang nhap!\n\n"
+                f"Loi: {message}\n\n"
+                f"Vui long kiem tra lai license key hoac lien he:\n"
                 f"Zalo/Momo: 0366468477"
             )
 

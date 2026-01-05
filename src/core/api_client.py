@@ -13,18 +13,29 @@ import requests
 from pathlib import Path
 from typing import Tuple, Optional
 import json
+import sys
+
+# Add src to path if not already there
+src_path = Path(__file__).parent.parent
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+from utils.config import SERVER_URL
 
 
 class APIClient:
     """Client for communicating with DouyinVoice Pro server"""
 
-    def __init__(self, server_url: str = "http://localhost:8000"):
+    def __init__(self, server_url: str = None):
         """
         Initialize API client
 
         Args:
-            server_url: Base URL of the server (default: localhost for dev)
+            server_url: Base URL of the server (default: from config.py)
         """
+        # Use provided URL or default from config
+        if server_url is None:
+            server_url = SERVER_URL
         self.server_url = server_url.rstrip("/")
         self.token: Optional[str] = None
         self.token_file = Path(__file__).parent.parent / "utils" / ".token"

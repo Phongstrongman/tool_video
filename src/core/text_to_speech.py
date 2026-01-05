@@ -18,8 +18,9 @@ import os
 import subprocess
 import re
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Callable
 from dataclasses import dataclass
+from src.core.parallel_processor import ParallelProcessor, ChunkedProcessor, Task
 
 
 @dataclass
@@ -77,12 +78,51 @@ class TextToSpeech:
     # Gioi han ky tu cho moi chunk
     MAX_CHUNK_SIZE = 500
 
+    # Map ten giong UI sang API format
+    UI_TO_GEMINI_VOICE = {
+        "Aoede (Nu - Sang)": "gemini-Aoede",
+        "Charon (Nam - Tram)": "gemini-Charon",
+        "Fenrir (Nam - Trung)": "gemini-Fenrir",
+        "Kore (Nu - Tre)": "gemini-Kore",
+        "Puck (Nam - Vui)": "gemini-Puck",
+        "Zephyr (Nu - Nhe)": "gemini-Zephyr",
+        "Orbit (Nam - Ro)": "gemini-Orus",
+        "Lyra (Nu - Am)": "gemini-Leda",
+        "Nova (Nu - Pro)": "gemini-Despina",
+        "Solaris (Nam - Manh)": "gemini-Enceladus",
+        "Echo (Nam - Vang)": "gemini-Umbriel",
+        "Aurora (Nu - Trang)": "gemini-Sulafat",
+        "Titan (Nam - Sau)": "gemini-Iapetus",
+        "Luna (Nu - Diu)": "gemini-Algenib",
+    }
+
+    UI_TO_EDGE_VOICE = {
+        "vi-VN-HoaiMyNeural (Nu)": "vi-VN-HoaiMyNeural",
+        "vi-VN-NamMinhNeural (Nam)": "vi-VN-NamMinhNeural",
+    }
+
     def __init__(self, temp_dir: Path = None):
         if temp_dir:
             self.temp_dir = Path(temp_dir)
         else:
             self.temp_dir = Path(__file__).parent.parent.parent / "temp"
         self.temp_dir.mkdir(exist_ok=True)
+
+        # Initialize parallel processing components
+        self.parallel_processor = None
+        self.chunked_processor = ChunkedProcessor()
+
+    def _convert_voice(self, voice: str) -> str:
+        """Convert ten giong tu UI sang API format"""
+        if voice in self.UI_TO_GEMINI_VOICE:
+            return self.UI_TO_GEMINI_VOICE[voice]
+        if voice in self.UI_TO_EDGE_VOICE:
+            return self.UI_TO_EDGE_VOICE[voice]
+        return voice
+
+    def _is_gemini_voice(self, voice: str) -> bool:
+        """Check if voice is Gemini voice"""
+        return voice.startswith("gemini-") or voice in self.UI_TO_GEMINI_VOICE
 
     def generate(self, text: str, voice: str = "vi-VN-HoaiMyNeural",
                  speed: float = 1.0, progress_callback=None) -> str:
@@ -103,6 +143,9 @@ class TextToSpeech:
 
         text = text.strip()
         speed = max(0.5, min(2.0, speed))
+
+        # Convert voice from UI format to API format
+        voice = self._convert_voice(voice)
 
         print(f"[TTS] Text: {len(text)} ky tu, voice: {voice}, speed: {speed}x")
 
@@ -141,11 +184,14 @@ class TextToSpeech:
                          progress_callback=None, api_key: str = None) -> str:
         """
         Tao audio bang Gemini TTS (Google AI - MIEN PHI)
+        AUTO FALLBACK sang Edge TTS neu Gemini khong kha dung
         """
         import wave
 
+        # AUTO FALLBACK: Neu google-genai chua cai dat, dung Edge TTS
         if genai is None:
-            raise Exception("google-genai chua cai dat. Chay: pip install google-genai")
+            print("[Gemini TTS] google-genai chua cai dat - AUTO FALLBACK sang Edge TTS")
+            return self._generate_single(text, "vi-VN-HoaiMyNeural", "+0%", progress_callback)
 
         if progress_callback:
             progress_callback(5)
@@ -154,8 +200,10 @@ class TextToSpeech:
         if not api_key:
             api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
+        # AUTO FALLBACK: Neu chua co API key, dung Edge TTS
         if not api_key:
-            raise Exception("Chua co Gemini API key! Vui long nhap API key trong phan cai dat.")
+            print("[Gemini TTS] Chua co API key - AUTO FALLBACK sang Edge TTS")
+            return self._generate_single(text, "vi-VN-HoaiMyNeural", "+0%", progress_callback)
 
         # Lay ten giong tu voice ID (gemini-Kore -> Kore)
         voice_name = voice.replace("gemini-", "")
@@ -256,12 +304,13 @@ class TextToSpeech:
             error_msg = str(e)
             print(f"[Gemini TTS] Loi: {error_msg}")
 
-            # Fallback sang Edge-TTS neu loi
-            if "API key" not in error_msg:
-                print("[Gemini TTS] Fallback sang Edge-TTS...")
+            # AUTO FALLBACK sang Edge-TTS cho TAT CA loi (bao gom ca API key)
+            print("[Gemini TTS] AUTO FALLBACK sang Edge-TTS...")
+            try:
                 return self._generate_single(text, "vi-VN-HoaiMyNeural", "+0%", progress_callback)
-            else:
-                raise Exception(f"Gemini TTS loi: {error_msg}")
+            except Exception as fallback_error:
+                # Neu Edge TTS cung fail, moi raise exception
+                raise Exception(f"Gemini TTS va Edge TTS deu loi. Gemini: {error_msg}, Edge: {str(fallback_error)}")
 
     def _generate_gtts(self, text: str, speed: float, progress_callback=None) -> str:
         """Tao audio bang Google TTS (gTTS)"""
@@ -329,61 +378,138 @@ class TextToSpeech:
 
     def _generate_long_text(self, text: str, voice: str, rate: str,
                             progress_callback=None) -> str:
-        """Tao audio cho text dai - XU LY SONG SONG"""
+        """Tao audio cho text dai - XU LY SONG SONG/TUAN TU tuy theo engine"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import time
+        import random
 
         # Chia text thanh cac chunk
         chunks = self._split_text(text)
-        print(f"[TTS] Da chia thanh {len(chunks)} doan - XU LY SONG SONG")
+        total_chunks = len(chunks)
 
-        # Tao danh sach output paths theo thu tu
+        # Xac dinh engine
+        is_gemini = voice.startswith("gemini-")
+
+        # TOI UU TOC DO TOI DA - Song song nhieu workers
+        if is_gemini:
+            max_workers = 6  # Gemini: 6 workers song song
+            print(f"[TTS] Gemini TTS - XU LY SONG SONG (6 workers) cho {total_chunks} chunks")
+        else:
+            # Edge-TTS: TOI UU - 10 workers song song
+            max_workers = 10
+            print(f"[TTS] Edge-TTS - XU LY SONG SONG (10 workers) cho {total_chunks} chunks")
+
+        # Tao danh sach output paths theo thu tu - KHONG dung UUID de dam bao thu tu
+        session_id = uuid.uuid4().hex[:6]  # 1 session ID chung cho tat ca chunks
         chunk_paths = []
-        for i in range(len(chunks)):
-            chunk_filename = f"tts_chunk_{i:03d}_{uuid.uuid4().hex[:4]}.mp3"
+        for i in range(total_chunks):
+            # Format: tts_chunk_SESSION_INDEX.mp3 - de dam bao thu tu khi ghep
+            chunk_filename = f"tts_chunk_{session_id}_{i:04d}.mp3"
             chunk_paths.append(str(self.temp_dir / chunk_filename))
 
-        # Ham xu ly 1 chunk
+        # Ham xu ly 1 chunk voi retry va exponential backoff
         def process_chunk(args):
             idx, chunk_text, output_path = args
-            for attempt in range(3):
-                try:
-                    self._run_async_tts(chunk_text, voice, rate, output_path)
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-                        return (idx, output_path, True)
-                except Exception as e:
-                    if attempt < 2:
-                        time.sleep(0.5)
-            return (idx, output_path, False)
+            # TOI UU TOC DO: Giam retry de xu ly nhanh hon
+            # Gemini: 1 retry (fallback nhanh), Edge: 3 retries
+            max_retries = 1 if is_gemini else 3
 
-        # Xu ly song song
+            for attempt in range(max_retries):
+                try:
+                    # TOI UU TOC DO: Giam delay xuong muc toi thieu
+                    if attempt > 0:
+                        # Retry delay: chi 1 giay cho moi attempt
+                        wait_time = 1.0 + random.uniform(0, 0.5)
+                        print(f"[TTS] Chunk {idx}: Retry {attempt + 1}, waiting {wait_time:.1f}s...")
+                        time.sleep(wait_time)
+                    else:
+                        # Delay request dau tien: TOI UU - chi 0.3-0.5s
+                        if is_gemini:
+                            time.sleep(random.uniform(0.3, 0.5))  # Gemini: 0.3-0.5s
+                        else:
+                            # Edge TTS: Delay cuc nho
+                            time.sleep(random.uniform(0.05, 0.1))  # Edge: 0.05-0.1s
+
+                    self._run_async_tts(chunk_text, voice, rate, output_path)
+
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                        return (idx, output_path, True, None)
+                    else:
+                        raise Exception("File audio khong hop le hoac qua nho")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    if attempt < max_retries - 1:
+                        print(f"[TTS] Chunk {idx}: Loi '{error_msg}', se thu lai...")
+                    else:
+                        # AUTO FALLBACK: Neu Gemini fail, thu Edge TTS
+                        if is_gemini:
+                            print(f"[TTS] Chunk {idx}: Gemini fail - AUTO FALLBACK sang Edge TTS...")
+                            try:
+                                self._run_async_tts(chunk_text, "vi-VN-HoaiMyNeural", "+0%", output_path)
+                                if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                                    print(f"[TTS] Chunk {idx}: THANH CONG voi Edge TTS!")
+                                    return (idx, output_path, True, None)
+                            except Exception as fallback_error:
+                                print(f"[TTS] Chunk {idx}: Edge TTS fallback cung fail: {fallback_error}")
+                        print(f"[TTS] Chunk {idx}: THAT BAI sau {max_retries} lan: {error_msg}")
+                        return (idx, output_path, False, error_msg)
+
+            return (idx, output_path, False, "Unknown error")
+
+        # Xu ly song song voi so workers gioi han
         completed = 0
         results = {}
+        failed_chunks = []
         temp_files = []
 
         try:
-            with ThreadPoolExecutor(max_workers=12) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
                     executor.submit(process_chunk, (i, chunks[i], chunk_paths[i])): i
-                    for i in range(len(chunks))
+                    for i in range(total_chunks)
                 }
 
                 for future in as_completed(futures):
-                    idx, path, success = future.result()
+                    idx, path, success, error = future.result()
                     results[idx] = (path, success)
                     completed += 1
 
+                    if not success:
+                        failed_chunks.append((idx, error))
+
                     if progress_callback:
-                        progress = int((completed / len(chunks)) * 80) + 10
+                        progress = int((completed / total_chunks) * 80) + 10
                         progress_callback(progress)
 
-            # Sap xep lai theo thu tu
-            for i in range(len(chunks)):
-                if i in results and results[i][1]:
-                    temp_files.append(results[i][0])
+            # Kiem tra chunks that bai
+            if failed_chunks:
+                failed_count = len(failed_chunks)
+                total = total_chunks
+                print(f"[TTS] WARNING: {failed_count}/{total} chunks that bai")
 
-            if not temp_files:
+                # Neu qua nhieu chunks that bai (>50%), bao loi
+                if failed_count > total * 0.5:
+                    failed_ids = [str(idx) for idx, _ in failed_chunks[:5]]
+                    raise Exception(f"Qua nhieu chunks that bai ({failed_count}/{total}): {', '.join(failed_ids)}...")
+
+            # Sap xep lai theo thu tu INDEX, chi lay chunks thanh cong
+            # QUAN TRONG: Phai giu dung thu tu 0, 1, 2, 3... de audio khong bi dao
+            temp_files = []
+            for i in range(total_chunks):
+                if i in results and results[i][1]:
+                    file_path = results[i][0]
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 500:
+                        temp_files.append((i, file_path))  # Luu ca index
+
+            # Sap xep theo index de dam bao thu tu
+            temp_files.sort(key=lambda x: x[0])
+            ordered_files = [f[1] for f in temp_files]  # Chi lay file paths
+
+            if not ordered_files:
                 raise Exception("Khong tao duoc bat ky chunk audio nao!")
+
+            print(f"[TTS] Ghep {len(ordered_files)} chunks theo thu tu: {[t[0] for t in temp_files]}")
 
             # Ghep tat ca chunk
             if progress_callback:
@@ -392,8 +518,8 @@ class TextToSpeech:
             output_filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
             output_path = str(self.temp_dir / output_filename)
 
-            print(f"[TTS] Dang ghep {len(temp_files)} file audio...")
-            self._concat_audio_files(temp_files, output_path)
+            print(f"[TTS] Dang ghep {len(ordered_files)} file audio...")
+            self._concat_audio_files(ordered_files, output_path)
 
             if progress_callback:
                 progress_callback(100)
@@ -525,14 +651,23 @@ class TextToSpeech:
                 pass
 
     def _run_async_tts(self, text: str, voice: str, rate: str, output_path: str):
-        """Chay async TTS"""
+        """Chay async TTS voi timeout tang"""
         import concurrent.futures
+
+        # Tang timeout cho text dai hon
+        text_length = len(text)
+        if text_length > 400:
+            timeout_seconds = 120  # 2 phut cho text dai
+        elif text_length > 200:
+            timeout_seconds = 90   # 1.5 phut cho text vua
+        else:
+            timeout_seconds = 60   # 1 phut cho text ngan
 
         try:
             loop = asyncio.get_running_loop()
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(self._run_in_new_loop, text, voice, rate, output_path)
-                future.result(timeout=60)
+                future.result(timeout=timeout_seconds)
         except RuntimeError:
             asyncio.run(self._generate_async(text, voice, rate, output_path))
 
@@ -549,6 +684,327 @@ class TextToSpeech:
         """Async function tao audio"""
         communicate = edge_tts.Communicate(text, voice, rate=rate)
         await communicate.save(output_path)
+
+    def generate_parallel(
+        self,
+        text: str,
+        voice: str = "vi-VN-HoaiMyNeural",
+        speed: float = 1.0,
+        num_threads: int = 4,
+        max_chars: int = 500,
+        add_silence: bool = True,
+        silence_duration: float = 0.1,
+        progress_callback: Optional[Callable] = None,
+        status_callback: Optional[Callable] = None
+    ) -> str:
+        """
+        Generate TTS using parallel processing for faster performance
+
+        Args:
+            text: Text to convert to speech
+            voice: Voice ID (edge-tts, gemini-X, gtts-vi)
+            speed: Speech speed (0.5 - 2.0)
+            num_threads: Number of parallel threads (default: 4)
+            max_chars: Maximum characters per segment (default: 500)
+            add_silence: Add silence between segments (default: True)
+            silence_duration: Silence duration in seconds (default: 0.1)
+            progress_callback: Callback(completed, total, segment_id, result)
+            status_callback: Callback(status: str)
+
+        Returns:
+            str: Path to generated audio file
+        """
+        if not text or not text.strip():
+            raise ValueError("Text khong duoc de trong!")
+
+        text = text.strip()
+        speed = max(0.5, min(2.0, speed))
+
+        if status_callback:
+            status_callback("Dang chia text thanh cac doan...")
+
+        # Step 1: Split text into segments using smart splitting
+        segments = self.chunked_processor.split_text_for_tts(text, max_chars=max_chars)
+        total_segments = len(segments)
+
+        if status_callback:
+            status_callback(f"Da chia thanh {total_segments} doan. Bat dau tao giong song song...")
+
+        # For very short text, use regular generate
+        if total_segments == 1:
+            if status_callback:
+                status_callback("Text ngan, tao truc tiep...")
+            return self.generate(text, voice, speed, progress_callback)
+
+        # Step 2: Initialize parallel processor - TOI UU TOC DO TOI DA
+        # Gemini TTS: 6 workers song song - NHANH NHAT
+        # Edge TTS: 10 workers song song
+        voice_converted = self._convert_voice(voice)
+        is_gemini = voice_converted.startswith("gemini-")
+
+        if is_gemini:
+            # Gemini TTS - TOI UU: 6 workers song song
+            adaptive_workers = 6
+            print(f"[TTS Parallel] Gemini TTS - XU LY SONG SONG (6 workers) cho {total_segments} segments")
+        else:
+            # Edge-TTS - TOI UU: 10 workers song song
+            adaptive_workers = 10
+            print(f"[TTS Parallel] Edge-TTS - XU LY SONG SONG (10 workers) cho {total_segments} segments")
+
+        self.parallel_processor = ParallelProcessor(max_workers=adaptive_workers)
+
+        # Prepare rate string for edge-tts
+        rate_percent = int((speed - 1.0) * 100)
+        rate = f"+{rate_percent}%" if rate_percent >= 0 else f"{rate_percent}%"
+
+        # Step 3: Create tasks for each segment
+        tasks = []
+        segment_paths = []
+
+        # TOI UU TOC DO: Giam retry de xu ly nhanh hon
+        # Gemini: 1 retry (fallback nhanh), Edge: 3 retries
+        max_retries_per_segment = 1 if is_gemini else 3
+
+        # Tao session ID chung de dam bao thu tu khi ghep
+        session_id = uuid.uuid4().hex[:6]
+
+        for i, segment in enumerate(segments):
+            # Format: tts_seg_SESSION_INDEX.mp3 - KHONG dung UUID rieng de dam bao thu tu
+            segment_path = str(self.temp_dir / f"tts_seg_{session_id}_{i:04d}.mp3")
+            segment_paths.append(segment_path)
+
+            task = Task(
+                id=f"segment_{i}",
+                func=self._generate_segment_with_retry,
+                args=(segment, i, total_segments),
+                kwargs={
+                    "voice": voice,
+                    "rate": rate,
+                    "output_path": segment_path,
+                    "max_retries": max_retries_per_segment
+                },
+                priority=i  # Process in order
+            )
+            tasks.append(task)
+
+        # Step 4: Set up progress callback wrapper
+        if progress_callback:
+            def progress_wrapper(completed, total, task_id, result, error=None):
+                if error:
+                    if status_callback:
+                        status_callback(f"Loi tai {task_id}: {error}")
+                else:
+                    if status_callback:
+                        status_callback(f"Dang tao giong {completed}/{total}...")
+                progress_callback(completed, total, task_id, result)
+
+            self.parallel_processor.set_progress_callback(progress_wrapper)
+
+        # Step 5: Run parallel processing
+        results = self.parallel_processor.run_parallel(tasks)
+
+        # Step 6: Check for errors - cho phep mot so segments that bai
+        errors = [task_id for task_id, result in results.items() if isinstance(result, dict) and "error" in result]
+        total_segments_count = len(segment_paths)
+        failed_count = len(errors)
+
+        if failed_count > 0:
+            print(f"[TTS Parallel] WARNING: {failed_count}/{total_segments_count} segments that bai")
+            if status_callback:
+                status_callback(f"Canh bao: {failed_count} segments that bai, dang xu ly...")
+
+            # Neu qua nhieu segments that bai (>50%), bao loi
+            if failed_count > total_segments_count * 0.5:
+                error_msg = f"Qua nhieu segments that bai ({failed_count}/{total_segments_count}): {', '.join(errors[:5])}..."
+                if status_callback:
+                    status_callback(error_msg)
+                raise Exception(error_msg)
+
+        # Step 7: Verify all segments - QUAN TRONG: Giu dung thu tu 0, 1, 2, 3...
+        valid_segments = []  # List of (index, path)
+        skipped_segments = []
+        for i, segment_path in enumerate(segment_paths):
+            if os.path.exists(segment_path) and os.path.getsize(segment_path) > 500:
+                valid_segments.append((i, segment_path))  # Luu ca index de sort
+            else:
+                skipped_segments.append(i)
+                print(f"[TTS Parallel] Skipping segment {i} - file khong ton tai hoac qua nho")
+
+        if not valid_segments:
+            raise Exception("Khong tao duoc bat ky segment audio nao!")
+
+        # Sort theo index de dam bao thu tu dung
+        valid_segments.sort(key=lambda x: x[0])
+        valid_paths = [seg[1] for seg in valid_segments]
+
+        print(f"[TTS Parallel] Ghep {len(valid_paths)} segments theo thu tu: {[s[0] for s in valid_segments]}")
+
+        if skipped_segments:
+            print(f"[TTS Parallel] Da bo qua {len(skipped_segments)} segments: {skipped_segments[:10]}...")
+
+        # Step 8: Merge audio chunks with silence
+        if status_callback:
+            status_callback("Dang ghep cac doan audio...")
+
+        output_filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
+        output_path = str(self.temp_dir / output_filename)
+
+        success = self.chunked_processor.merge_audio_chunks(
+            valid_paths,
+            output_path,
+            add_silence=add_silence,
+            silence_duration=silence_duration
+        )
+
+        if not success:
+            raise Exception("Khong the ghep cac doan audio!")
+
+        # Step 9: Cleanup segment files
+        for segment_path in segment_paths:
+            try:
+                if os.path.exists(segment_path):
+                    os.remove(segment_path)
+            except:
+                pass
+
+        if status_callback:
+            status_callback("Hoan thanh!")
+
+        if progress_callback:
+            progress_callback(total_segments, total_segments, "final", output_path)
+
+        print(f"[TTS Parallel] Hoan thanh: {output_path}")
+        return output_path
+
+    def _generate_segment_with_retry(
+        self,
+        segment_text: str,
+        segment_index: int,
+        total_segments: int,
+        voice: str,
+        rate: str,
+        output_path: str,
+        max_retries: int = 5
+    ) -> str:
+        """
+        Generate TTS for a single segment with retry logic
+
+        Args:
+            segment_text: Text segment to convert
+            segment_index: Index of this segment
+            total_segments: Total number of segments
+            voice: Voice ID
+            rate: Speech rate
+            output_path: Output file path
+            max_retries: Maximum retry attempts (default: 5)
+
+        Returns:
+            str: Path to generated audio file
+        """
+        import time
+        import random
+
+        # Convert voice from UI format to API format
+        voice = self._convert_voice(voice)
+        last_error = None
+
+        # Xac dinh engine
+        is_gemini = voice.startswith("gemini-")
+
+        for attempt in range(max_retries):
+            try:
+                # TOI UU TOC DO: Giam delay xuong muc toi thieu
+                if attempt > 0:
+                    # Retry delay: chi 1 giay cho moi attempt
+                    wait_time = 1.0 + random.uniform(0, 0.5)
+                    print(f"[TTS] Segment {segment_index}: Retry {attempt + 1}, waiting {wait_time:.1f}s...")
+                    time.sleep(wait_time)
+                else:
+                    # Delay request dau tien: TOI UU - chi 0.3-0.5s
+                    if is_gemini:
+                        time.sleep(random.uniform(0.3, 0.5))  # Gemini: 0.3-0.5s
+                    else:
+                        # Edge TTS: Delay cuc nho
+                        time.sleep(random.uniform(0.05, 0.1))  # Edge: 0.05-0.1s
+
+                # Generate audio for this segment
+                # Handle different TTS engines
+                if voice.startswith("gemini-"):
+                    # Extract speed from rate string
+                    rate_value = float(rate.rstrip('%')) / 100.0 + 1.0
+                    result_path = self._generate_gemini(
+                        segment_text,
+                        voice,
+                        rate_value,
+                        progress_callback=None
+                    )
+                    # Move to expected output path
+                    if result_path != output_path:
+                        import shutil
+                        shutil.move(result_path, output_path)
+                elif voice.startswith("gtts"):
+                    rate_value = float(rate.rstrip('%')) / 100.0 + 1.0
+                    result_path = self._generate_gtts(
+                        segment_text,
+                        rate_value,
+                        progress_callback=None
+                    )
+                    if result_path != output_path:
+                        import shutil
+                        shutil.move(result_path, output_path)
+                else:
+                    # Edge-TTS
+                    self._run_async_tts(segment_text, voice, rate, output_path)
+
+                # Verify file was created
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                    return output_path
+                else:
+                    raise Exception("File audio khong hop le hoac qua nho!")
+
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                print(f"[TTS] Segment {segment_index}: Loi '{error_msg}'")
+
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    # Final attempt failed - FALLBACK TO EDGE TTS
+                    if is_gemini:
+                        print(f"[TTS] Segment {segment_index}: Gemini that bai sau {max_retries} lan - FALLBACK sang Edge TTS...")
+                        try:
+                            # Fallback to Edge TTS with Vietnamese voice
+                            fallback_voice = "vi-VN-HoaiMyNeural"
+                            self._run_async_tts(segment_text, fallback_voice, rate, output_path)
+
+                            # Verify fallback succeeded
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                                print(f"[TTS] Segment {segment_index}: THANH CONG voi Edge TTS fallback!")
+                                return output_path
+                            else:
+                                raise Exception("Edge TTS fallback tao file khong hop le")
+                        except Exception as fallback_error:
+                            print(f"[TTS] Segment {segment_index}: Edge TTS fallback cung that bai: {fallback_error}")
+                            return {"error": f"Segment {segment_index + 1}/{total_segments} failed (Gemini + Edge fallback): {error_msg}"}
+                    else:
+                        # Edge TTS that bai - khong fallback
+                        print(f"[TTS] Segment {segment_index}: THAT BAI sau {max_retries} lan")
+                        return {"error": f"Segment {segment_index + 1}/{total_segments} failed: {error_msg}"}
+
+        # Should not reach here, but just in case
+        if is_gemini:
+            # Try Edge TTS fallback
+            print(f"[TTS] Segment {segment_index}: Gemini timeout - FALLBACK sang Edge TTS...")
+            try:
+                fallback_voice = "vi-VN-HoaiMyNeural"
+                self._run_async_tts(segment_text, fallback_voice, rate, output_path)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                    print(f"[TTS] Segment {segment_index}: THANH CONG voi Edge TTS fallback!")
+                    return output_path
+            except:
+                pass
+        return {"error": f"Segment {segment_index + 1}/{total_segments} failed: {str(last_error)}"}
 
     def get_available_voices(self) -> dict:
         """Lay danh sach giong"""
