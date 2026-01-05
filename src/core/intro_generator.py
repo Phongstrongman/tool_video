@@ -148,7 +148,19 @@ class IntroGenerator:
             progress_callback(40)
 
         video_duration = self.get_video_duration(video_path)
-        clip_duration = tts_duration / 3
+
+        # QUAN TRONG: Crossfade se cat bot thoi luong video
+        # 2 transitions x 0.3s = 0.6s bi mat
+        # Can tang clip_duration de bu lai, dam bao video = audio
+        fade_duration = 0.3  # 300ms crossfade
+        total_fade_loss = fade_duration * 2  # 0.6s mat do 2 transitions
+
+        # Tinh clip_duration sao cho tong sau crossfade = tts_duration
+        # Formula: 3*clip - 2*fade = tts_duration
+        # => clip = (tts_duration + 2*fade) / 3
+        clip_duration = (tts_duration + total_fade_loss) / 3
+
+        print(f"[Intro] TTS: {tts_duration:.2f}s, Clip: {clip_duration:.2f}s x 3, Fade loss: {total_fade_loss:.2f}s")
 
         # Calculate clip positions
         clip1_start = 0  # Start of video
@@ -167,31 +179,63 @@ class IntroGenerator:
         if progress_callback:
             progress_callback(60)
 
-        # Concatenate clips (silent video)
-        concat_list = os.path.join(temp_dir, "intro_concat.txt")
-        with open(concat_list, 'w') as f:
-            f.write(f"file '{os.path.abspath(clip1_path)}'\n")
-            f.write(f"file '{os.path.abspath(clip2_path)}'\n")
-            f.write(f"file '{os.path.abspath(clip3_path)}'\n")
-
+        # Concatenate clips VOI CROSSFADE TRANSITION (muot hon)
         intro_silent_path = os.path.join(temp_dir, "intro_silent.mp4")
+
+        # Dung xfade filter de tao transition muot giua cac clip
+        # offset = thoi diem bat dau fade (clip_duration - fade)
+        # Sau crossfade: tong video = 3*clip - 2*fade = tts_duration
+        offset1 = clip_duration - fade_duration
+        offset2 = (clip_duration * 2) - (fade_duration * 2)
+
         cmd = [
             'ffmpeg', '-y',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', concat_list,
-            '-c', 'copy',
+            '-i', clip1_path,
+            '-i', clip2_path,
+            '-i', clip3_path,
+            '-filter_complex',
+            f'[0:v][1:v]xfade=transition=fade:duration={fade_duration}:offset={offset1}[v01];'
+            f'[v01][2:v]xfade=transition=fade:duration={fade_duration}:offset={offset2}[vout]',
+            '-map', '[vout]',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '23',
+            '-pix_fmt', 'yuv420p',
             intro_silent_path
         ]
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
 
+        # Fallback to simple concat if xfade fails
         if result.returncode != 0:
-            print(f"[Intro ERROR] Concat failed: {result.stderr.decode()}")
-            return False
+            print(f"[Intro] xfade failed, using simple concat...")
+            concat_list = os.path.join(temp_dir, "intro_concat.txt")
+            with open(concat_list, 'w') as f:
+                f.write(f"file '{os.path.abspath(clip1_path)}'\n")
+                f.write(f"file '{os.path.abspath(clip2_path)}'\n")
+                f.write(f"file '{os.path.abspath(clip3_path)}'\n")
+
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', concat_list,
+                '-c', 'copy',
+                intro_silent_path
+            ]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+
+            if result.returncode != 0:
+                print(f"[Intro ERROR] Concat failed: {result.stderr.decode()}")
+                return False
 
         if progress_callback:
             progress_callback(80)
@@ -204,7 +248,12 @@ class IntroGenerator:
             progress_callback(100)
 
         # Cleanup temp files
-        for f in [clip1_path, clip2_path, clip3_path, concat_list, intro_silent_path, tts_audio_path]:
+        cleanup_files = [clip1_path, clip2_path, clip3_path, intro_silent_path, tts_audio_path]
+        concat_list = os.path.join(temp_dir, "intro_concat.txt")
+        if os.path.exists(concat_list):
+            cleanup_files.append(concat_list)
+
+        for f in cleanup_files:
             if os.path.exists(f):
                 try:
                     os.remove(f)
@@ -218,16 +267,16 @@ class IntroGenerator:
 
         return success
 
-    def _extract_clip_silent(self, video_path: str, start: float, duration: float, output_path: str, speed: float = 1.2) -> bool:
+    def _extract_clip_silent(self, video_path: str, start: float, duration: float, output_path: str, speed: float = 1.3) -> bool:
         """
-        Extract a clip from video WITHOUT audio (silent) with speed adjustment
+        Extract a clip from video WITHOUT audio (silent) - TANG TOC 1.3x
 
         Args:
             video_path: Source video
             start: Start time in seconds
-            duration: Duration in seconds
+            duration: Duration in seconds (se lay nhieu hon de bu cho speed)
             output_path: Output path
-            speed: Speed multiplier (1.2 = 20% faster)
+            speed: Toc do video (1.3 = nhanh hon 30%)
 
         Returns:
             True if successful
@@ -236,18 +285,21 @@ class IntroGenerator:
         video_path = os.path.normpath(video_path)
         output_path = os.path.normpath(output_path)
 
-        setpts_value = 1.0 / speed  # 1/1.2 = 0.833
+        # Lay nhieu hon de sau khi tang toc van du do dai
+        # VD: can 3s output, speed 1.3x => lay 3 * 1.3 = 3.9s input
+        input_duration = duration * speed
+        setpts_value = 1.0 / speed  # 1/1.3 = 0.77
 
         cmd = [
             'ffmpeg', '-y',
             '-ss', str(start),
             '-i', video_path,
-            '-t', str(duration),
-            # Apply speed filter to video only (NO AUDIO)
-            '-vf', f'setpts={setpts_value}*PTS',
+            '-t', str(input_duration),  # Lay nhieu hon
+            '-vf', f'setpts={setpts_value}*PTS',  # Tang toc video
             '-an',  # Remove audio
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',  # TOI UU TOC DO
+            '-preset', 'ultrafast',
+            '-crf', '23',
             '-pix_fmt', 'yuv420p',
             output_path
         ]
