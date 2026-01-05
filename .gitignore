@@ -68,6 +68,11 @@ check_logs.bat
 run.bat
 requirements-client.txt
 
+# === BUILD & INSTALL SCRIPTS (local only) ===
+CAI_DAT_FFMPEG.bat
+HUONG_DAN_SU_DUNG.txt
+build.bat
+
 # === PROJECT SPECIFIC ===
 # Temp and output contents (keep folders)
 temp/*
