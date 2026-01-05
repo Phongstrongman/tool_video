@@ -63,7 +63,10 @@ INTRO_OPTIMIZATIONS.md
 STT_SPEED_OPTIMIZATION.md
 TTS_FALLBACK_IMPROVEMENTS.md
 VIDEO_EXPORT_CRASH_FIXES.md
+ANTI_COPYRIGHT_FEATURES.md
 check_logs.bat
+run.bat
+requirements-client.txt
 
 # === PROJECT SPECIFIC ===
 # Temp and output contents (keep folders)
