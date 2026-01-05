@@ -30,25 +30,43 @@ class VideoMerger:
         self.hw_accel = self._detect_hw_acceleration()
 
     def _detect_hw_acceleration(self) -> str:
-        """Phat hien GPU acceleration kha dung"""
+        """Phat hien GPU acceleration kha dung - TEST THAT THU"""
+        # Test NVIDIA NVENC
+        if self._test_encoder('h264_nvenc'):
+            print("[VideoMerger] Detected: NVIDIA NVENC (GPU)")
+            return 'nvenc'
+
+        # Test Intel QuickSync
+        if self._test_encoder('h264_qsv'):
+            print("[VideoMerger] Detected: Intel QuickSync (GPU)")
+            return 'qsv'
+
+        # Test AMD AMF
+        if self._test_encoder('h264_amf'):
+            print("[VideoMerger] Detected: AMD AMF (GPU)")
+            return 'amf'
+
+        print("[VideoMerger] No GPU acceleration found, using CPU")
+        return 'cpu'
+
+    def _test_encoder(self, encoder: str) -> bool:
+        """Test xem encoder co hoat dong khong (khong chi check list)"""
         try:
-            # Kiem tra NVIDIA NVENC
+            # Tao test video 1 frame de test encoder
+            cmd = [
+                'ffmpeg', '-f', 'lavfi', '-i', 'color=black:s=320x240:d=0.1',
+                '-c:v', encoder, '-f', 'null', '-'
+            ]
             result = subprocess.run(
-                ['ffmpeg', '-hide_banner', '-encoders'],
-                capture_output=True, text=True,
+                cmd,
+                capture_output=True,
+                timeout=5,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
-            if 'h264_nvenc' in result.stdout:
-                return 'nvenc'
-            # Intel QuickSync
-            if 'h264_qsv' in result.stdout:
-                return 'qsv'
-            # AMD AMF
-            if 'h264_amf' in result.stdout:
-                return 'amf'
+            # Neu return code = 0 thi encoder hoat dong
+            return result.returncode == 0
         except:
-            pass
-        return 'cpu'
+            return False
 
     def merge(self, video_path: str, audio_path: str, output_name: str,
               mix_original: bool = False, anti_copyright: dict = None,
@@ -197,59 +215,70 @@ class VideoMerger:
                 ])
 
         else:
-            # Replace audio (no mixing) - LOOP AUDIO if shorter than video
+            # Replace audio (no mixing) - KHONG LOOP, chi phat 1 lan
+            # Neu audio ngan hon video: phan con lai se im lang
             cmd = [
                 'ffmpeg', '-y',
                 '-i', video_path,
-                '-stream_loop', '-1',  # Loop audio indefinitely to match video length
                 '-i', audio_path
             ]
 
             if filter_str:
-                cmd.extend(['-vf', filter_str])
+                # Co video filter: can dung filter_complex de pad audio
+                cmd.extend([
+                    '-filter_complex',
+                    f'[0:v]{filter_str}[vout];[1:a]apad=whole_dur={duration}[aout]',
+                    '-map', '[vout]',
+                    '-map', '[aout]'
+                ])
+            else:
+                # Khong co video filter: pad audio voi silence
+                cmd.extend([
+                    '-filter_complex',
+                    f'[1:a]apad=whole_dur={duration}[aout]',
+                    '-map', '0:v:0',
+                    '-map', '[aout]'
+                ])
 
-            cmd.extend([
-                '-map', '0:v:0',
-                '-map', '1:a:0'
-            ])
-
-        # Output settings - TOI UU VOI GPU ACCELERATION
-        # Su dung GPU neu co (NHANH HON 3-5 LAN!)
+        # Output settings - TOI UU DUNG LUONG NHO + CHAT LUONG TOT
+        # CRF 28 = chat luong tot, file nho hon 50% so voi CRF 23
         if self.hw_accel == 'nvenc':
-            # NVIDIA GPU
+            # NVIDIA GPU - CQ 28 tuong duong CRF 28
             cmd.extend([
                 '-c:v', 'h264_nvenc',
-                '-preset', 'p4',  # p1=fastest, p7=slowest, p4=balanced
-                '-rc', 'vbr',     # Variable bitrate
-                '-cq', '23',      # Quality (tuong duong CRF)
-                '-b:v', '5M',     # Target bitrate
+                '-preset', 'p4',
+                '-rc', 'vbr',
+                '-cq', '28',      # Tang tu 23 len 28 (file nho hon 50%)
+                '-b:v', '2M',     # Giam tu 5M xuong 2M
+                '-maxrate', '3M',
+                '-bufsize', '4M',
             ])
-            print("[VideoMerger] Using NVIDIA NVENC (GPU) - FAST!")
+            print("[VideoMerger] Using NVIDIA NVENC (GPU) - Optimized size")
         elif self.hw_accel == 'qsv':
             # Intel QuickSync
             cmd.extend([
                 '-c:v', 'h264_qsv',
                 '-preset', 'veryfast',
-                '-global_quality', '23',
+                '-global_quality', '28',  # Tang tu 23 len 28
             ])
-            print("[VideoMerger] Using Intel QuickSync (GPU) - FAST!")
+            print("[VideoMerger] Using Intel QuickSync (GPU) - Optimized size")
         elif self.hw_accel == 'amf':
             # AMD GPU
             cmd.extend([
                 '-c:v', 'h264_amf',
                 '-quality', 'speed',
                 '-rc', 'vbr_peak',
-                '-qp_i', '23',
+                '-qp_i', '28',    # Tang tu 23 len 28
             ])
-            print("[VideoMerger] Using AMD AMF (GPU) - FAST!")
+            print("[VideoMerger] Using AMD AMF (GPU) - Optimized size")
         else:
-            # CPU fallback - TOI UU PRESET CHO TOC DO
+            # CPU fallback
             cmd.extend([
                 '-c:v', 'libx264',
-                '-preset', 'veryfast',  # DOI TU 'fast' SANG 'veryfast' (NHANH HON 40%)
-                '-crf', '23',
+                '-preset', 'veryfast',
+                '-crf', '28',     # Tang tu 23 len 28 (file nho hon 50%)
             ])
-            print("[VideoMerger] Using CPU encoding (no GPU found)")
+            print("[VideoMerger] Using CPU encoding - Optimized size")
 
         # Audio settings - CHUNG CHO TAT CA
         cmd.extend([
