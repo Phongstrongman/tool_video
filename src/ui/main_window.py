@@ -303,8 +303,8 @@ class MainWindow(QMainWindow):
         step2 = QGroupBox("Buoc 2: Chuyen giong noi thanh van ban")
         step2.setStyleSheet(groupbox_style)
         step2_layout = QVBoxLayout(step2)
-        step2_layout.setSpacing(8)
-        step2_layout.setContentsMargins(15, 20, 15, 10)
+        step2_layout.setSpacing(10)
+        step2_layout.setContentsMargins(15, 20, 15, 15)
 
         # STT Engine selection
         stt_row = QHBoxLayout()
@@ -353,11 +353,11 @@ class MainWindow(QMainWindow):
             color: #4fc3f7;
             font-size: 11px;
             background: #1a1a2e;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 4px;
-            margin-top: 5px;
         """)
         self.label_transcribe_status.setWordWrap(True)
+        self.label_transcribe_status.setMinimumHeight(28)
         step2_layout.addWidget(self.label_transcribe_status)
 
         layout.addWidget(step2)
