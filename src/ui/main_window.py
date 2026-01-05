@@ -350,14 +350,15 @@ class MainWindow(QMainWindow):
 
         self.label_transcribe_status = QLabel("Cho trich xuat audio")
         self.label_transcribe_status.setStyleSheet("""
-            color: #4fc3f7;
-            font-size: 11px;
-            background: #1a1a2e;
-            padding: 6px 10px;
-            border-radius: 4px;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: bold;
+            background: #6f42c1;
+            padding: 8px 12px;
+            border-radius: 5px;
         """)
         self.label_transcribe_status.setWordWrap(True)
-        self.label_transcribe_status.setMinimumHeight(28)
+        self.label_transcribe_status.setMinimumHeight(32)
         step2_layout.addWidget(self.label_transcribe_status)
 
         layout.addWidget(step2)
