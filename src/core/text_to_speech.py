@@ -379,184 +379,102 @@ class TextToSpeech:
 
     def _generate_long_text(self, text: str, voice: str, rate: str,
                             progress_callback=None) -> str:
-        """Tao audio cho text dai - XU LY SONG SONG/TUAN TU tuy theo engine"""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        """Tao audio cho text dai - XU LY TUAN TU DE DAM BAO KHONG BO SOT"""
         import time
-        import random
 
         # Chia text thanh cac chunk
         chunks = self._split_text(text)
         total_chunks = len(chunks)
 
-        # Xac dinh engine
-        is_gemini = voice.startswith("gemini-")
+        print(f"[TTS] Text dai: {len(text)} ky tu, chia thanh {total_chunks} chunks")
+        print(f"[TTS] XU LY TUAN TU de dam bao khong bo sot bat ky doan nao")
 
-        # TOI UU TOC DO TOI DA - Song song nhieu workers
-        if is_gemini:
-            max_workers = 6  # Gemini: 6 workers song song
-            print(f"[TTS] Gemini TTS - XU LY SONG SONG (6 workers) cho {total_chunks} chunks")
-        else:
-            # Edge-TTS: TOI UU - 10 workers song song
-            max_workers = 10
-            print(f"[TTS] Edge-TTS - XU LY SONG SONG (10 workers) cho {total_chunks} chunks")
-
-        # Tao danh sach output paths theo thu tu - KHONG dung UUID de dam bao thu tu
-        session_id = uuid.uuid4().hex[:6]  # 1 session ID chung cho tat ca chunks
+        # Tao danh sach output paths theo thu tu
+        session_id = uuid.uuid4().hex[:6]
         chunk_paths = []
         for i in range(total_chunks):
-            # Format: tts_chunk_SESSION_INDEX.mp3 - de dam bao thu tu khi ghep
             chunk_filename = f"tts_chunk_{session_id}_{i:04d}.mp3"
             chunk_paths.append(str(self.temp_dir / chunk_filename))
 
-        # Ham xu ly 1 chunk voi retry va exponential backoff
-        def process_chunk(args):
-            idx, chunk_text, output_path = args
-            # TOI UU TOC DO: Giam retry de xu ly nhanh hon
-            # Gemini: 1 retry (fallback nhanh), Edge: 3 retries
-            max_retries = 1 if is_gemini else 3
+        # XU LY TUAN TU - KHONG SONG SONG de dam bao khong bo sot
+        successful_files = []
 
-            for attempt in range(max_retries):
-                try:
-                    # TOI UU TOC DO: Giam delay xuong muc toi thieu
-                    if attempt > 0:
-                        # Retry delay: chi 1 giay cho moi attempt
-                        wait_time = 1.0 + random.uniform(0, 0.5)
-                        print(f"[TTS] Chunk {idx}: Retry {attempt + 1}, waiting {wait_time:.1f}s...")
-                        time.sleep(wait_time)
-                    else:
-                        # Delay request dau tien: TOI UU - chi 0.3-0.5s
-                        if is_gemini:
-                            time.sleep(random.uniform(0.3, 0.5))  # Gemini: 0.3-0.5s
+        try:
+            for i, chunk_text in enumerate(chunks):
+                output_path = chunk_paths[i]
+                print(f"[TTS] Dang xu ly chunk {i+1}/{total_chunks} ({len(chunk_text)} ky tu)...")
+
+                # RETRY TOI DA 5 LAN cho moi chunk
+                success = False
+                for attempt in range(5):
+                    try:
+                        if attempt > 0:
+                            wait_time = 1.0 + attempt * 0.5
+                            print(f"[TTS] Chunk {i+1}: Retry lan {attempt + 1}, doi {wait_time:.1f}s...")
+                            time.sleep(wait_time)
+
+                        # Thu voi voice duoc chon truoc
+                        self._run_async_tts(chunk_text, voice, rate, output_path)
+
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+                            print(f"[TTS] Chunk {i+1}/{total_chunks}: OK ({os.path.getsize(output_path) / 1024:.1f} KB)")
+                            successful_files.append(output_path)
+                            success = True
+                            break
                         else:
-                            # Edge TTS: Delay cuc nho
-                            time.sleep(random.uniform(0.05, 0.1))  # Edge: 0.05-0.1s
+                            raise Exception("File audio khong hop le")
 
-                    self._run_async_tts(chunk_text, voice, rate, output_path)
+                    except Exception as e:
+                        print(f"[TTS] Chunk {i+1}: Loi '{e}'")
 
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-                        return (idx, output_path, True, None)
-                    else:
-                        raise Exception("File audio khong hop le hoac qua nho")
-
-                except Exception as e:
-                    error_msg = str(e)
-                    if attempt < max_retries - 1:
-                        print(f"[TTS] Chunk {idx}: Loi '{error_msg}', se thu lai...")
-                    else:
-                        # AUTO FALLBACK: Neu Gemini fail, thu Edge TTS
-                        if is_gemini:
-                            print(f"[TTS] Chunk {idx}: Gemini fail - AUTO FALLBACK sang Edge TTS...")
+                        # Sau 2 lan that bai, thu voi Edge TTS (stable hon)
+                        if attempt >= 2:
+                            print(f"[TTS] Chunk {i+1}: Thu voi Edge TTS...")
                             try:
                                 self._run_async_tts(chunk_text, "vi-VN-HoaiMyNeural", "+0%", output_path)
                                 if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-                                    print(f"[TTS] Chunk {idx}: THANH CONG voi Edge TTS!")
-                                    return (idx, output_path, True, None)
-                            except Exception as fallback_error:
-                                print(f"[TTS] Chunk {idx}: Edge TTS fallback cung fail: {fallback_error}")
-                        print(f"[TTS] Chunk {idx}: THAT BAI sau {max_retries} lan: {error_msg}")
-                        return (idx, output_path, False, error_msg)
+                                    print(f"[TTS] Chunk {i+1}: THANH CONG voi Edge TTS!")
+                                    successful_files.append(output_path)
+                                    success = True
+                                    break
+                            except Exception as edge_error:
+                                print(f"[TTS] Chunk {i+1}: Edge TTS cung fail: {edge_error}")
 
-            return (idx, output_path, False, "Unknown error")
+                # Neu chunk nay that bai hoan toan, BAO LOI NGAY
+                if not success:
+                    raise Exception(f"Chunk {i+1}/{total_chunks} THAT BAI sau 5 lan retry! Dung xu ly.")
 
-        # Xu ly song song voi so workers gioi han
-        completed = 0
-        results = {}
-        failed_chunks = []
-        temp_files = []
+                # Update progress
+                if progress_callback:
+                    progress = int(((i + 1) / total_chunks) * 85) + 10
+                    progress_callback(progress)
 
-        try:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(process_chunk, (i, chunks[i], chunk_paths[i])): i
-                    for i in range(total_chunks)
-                }
+            # Kiem tra ket qua
+            if len(successful_files) != total_chunks:
+                raise Exception(f"Chi tao duoc {len(successful_files)}/{total_chunks} chunks!")
 
-                for future in as_completed(futures):
-                    idx, path, success, error = future.result()
-                    results[idx] = (path, success)
-                    completed += 1
+            print(f"[TTS] Da tao THANH CONG {len(successful_files)}/{total_chunks} chunks")
 
-                    if not success:
-                        failed_chunks.append((idx, error))
-
-                    if progress_callback:
-                        progress = int((completed / total_chunks) * 80) + 10
-                        progress_callback(progress)
-
-            # Kiem tra chunks that bai va RETRY LAI
-            if failed_chunks:
-                failed_count = len(failed_chunks)
-                total = total_chunks
-                print(f"[TTS] WARNING: {failed_count}/{total} chunks that bai, dang retry...")
-
-                # RETRY cac chunks that bai - QUAN TRONG de khong mat audio
-                for idx, error in failed_chunks:
-                    print(f"[TTS] Retry chunk {idx}...")
-                    retry_success = False
-
-                    # Thu 3 lan voi Edge TTS (stable hon)
-                    for retry in range(3):
-                        try:
-                            time.sleep(1.0 + retry * 0.5)  # Tang delay moi lan retry
-                            self._run_async_tts(chunks[idx], "vi-VN-HoaiMyNeural", "+0%", chunk_paths[idx])
-
-                            if os.path.exists(chunk_paths[idx]) and os.path.getsize(chunk_paths[idx]) > 500:
-                                print(f"[TTS] Chunk {idx}: RETRY THANH CONG (lan {retry + 1})")
-                                results[idx] = (chunk_paths[idx], True)
-                                retry_success = True
-                                break
-                        except Exception as e:
-                            print(f"[TTS] Chunk {idx}: Retry {retry + 1} that bai: {e}")
-
-                    if not retry_success:
-                        print(f"[TTS] Chunk {idx}: THAT BAI HOAN TOAN sau 3 lan retry")
-
-                # Dem lai so chunks that bai sau retry
-                final_failed = sum(1 for i in range(total_chunks) if i not in results or not results[i][1])
-                if final_failed > total * 0.3:  # Giam nguong xuong 30%
-                    raise Exception(f"Qua nhieu chunks that bai ({final_failed}/{total}) sau retry")
-
-            # Sap xep lai theo thu tu INDEX, chi lay chunks thanh cong
-            # QUAN TRONG: Phai giu dung thu tu 0, 1, 2, 3... de audio khong bi dao
-            temp_files = []
-            for i in range(total_chunks):
-                if i in results and results[i][1]:
-                    file_path = results[i][0]
-                    if os.path.exists(file_path) and os.path.getsize(file_path) > 500:
-                        temp_files.append((i, file_path))  # Luu ca index
-                    else:
-                        print(f"[TTS] WARNING: Chunk {i} file khong hop le, bo qua")
-                else:
-                    print(f"[TTS] WARNING: Chunk {i} khong co ket qua, bo qua")
-
-            # Sap xep theo index de dam bao thu tu
-            temp_files.sort(key=lambda x: x[0])
-            ordered_files = [f[1] for f in temp_files]  # Chi lay file paths
-
-            if not ordered_files:
-                raise Exception("Khong tao duoc bat ky chunk audio nao!")
-
-            # Canh bao neu bi mat chunks
-            if len(ordered_files) < total_chunks:
-                missing = total_chunks - len(ordered_files)
-                print(f"[TTS] CANH BAO: Mat {missing}/{total_chunks} chunks - audio co the bi ngat quang!")
-
-            print(f"[TTS] Ghep {len(ordered_files)} chunks theo thu tu: {[t[0] for t in temp_files]}")
-
-            # Ghep tat ca chunk
+            # Ghep tat ca chunk thanh 1 file
             if progress_callback:
                 progress_callback(90)
 
             output_filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
-            output_path = str(self.temp_dir / output_filename)
+            final_output_path = str(self.temp_dir / output_filename)
 
-            print(f"[TTS] Dang ghep {len(ordered_files)} file audio...")
-            self._concat_audio_files(ordered_files, output_path)
+            print(f"[TTS] Dang ghep {len(successful_files)} file audio...")
+            self._concat_audio_files(successful_files, final_output_path)
+
+            # Kiem tra file output
+            if not os.path.exists(final_output_path) or os.path.getsize(final_output_path) < 1000:
+                raise Exception("Ghep file audio that bai!")
+
+            print(f"[TTS] HOAN THANH: {os.path.getsize(final_output_path) / 1024:.1f} KB")
 
             if progress_callback:
                 progress_callback(100)
 
-            return output_path
+            return final_output_path
 
         finally:
             # Xoa file chunk tam
