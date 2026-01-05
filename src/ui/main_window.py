@@ -406,7 +406,7 @@ class MainWindow(QMainWindow):
             QPushButton:disabled { background: #555; }
         """)
         self.btn_translate.clicked.connect(self._translate_text)
-        self.btn_translate.setEnabled(False)
+        self.btn_translate.setEnabled(True)  # Luon bat - cho phep nhap text truc tiep
         step3_layout.addWidget(self.btn_translate)
 
         self.progress_translate = QProgressBar()
@@ -421,7 +421,7 @@ class MainWindow(QMainWindow):
         """)
         step3_layout.addWidget(self.progress_translate)
 
-        self.label_translate_status = QLabel("Cho chuyen thanh van ban")
+        self.label_translate_status = QLabel("San sang - Nhap text tieng Trung vao o tren roi bam Dich")
         self.label_translate_status.setStyleSheet("""
             color: #ffb74d;
             font-size: 11px;
@@ -558,7 +558,7 @@ class MainWindow(QMainWindow):
             QPushButton:disabled { background: #555; }
         """)
         self.btn_tts.clicked.connect(self._generate_tts)
-        self.btn_tts.setEnabled(False)
+        self.btn_tts.setEnabled(True)  # Luon bat - cho phep nhap text truc tiep
         step4_layout.addWidget(self.btn_tts)
 
         self.progress_tts = QProgressBar()
@@ -573,7 +573,7 @@ class MainWindow(QMainWindow):
         """)
         step4_layout.addWidget(self.progress_tts)
 
-        self.label_tts_status = QLabel("Cho dich van ban")
+        self.label_tts_status = QLabel("San sang - Nhap text tieng Viet vao o tren roi bam Tao Giong Noi")
         self.label_tts_status.setStyleSheet("""
             color: #f48fb1;
             font-size: 11px;
@@ -723,7 +723,7 @@ class MainWindow(QMainWindow):
         """)
         step5_layout.addWidget(self.progress_export)
 
-        self.label_export_status = QLabel("Cho tao giong noi")
+        self.label_export_status = QLabel("San sang - Chon video va tao giong noi de xuat")
         self.label_export_status.setStyleSheet("""
             color: #80deea;
             font-size: 11px;
@@ -1135,9 +1135,7 @@ class MainWindow(QMainWindow):
         self.translated_text = text
         self.text_translated.setPlainText(text)
         self.btn_translate.setEnabled(True)
-        self.btn_tts.setEnabled(True)
         self.label_translate_status.setText("Hoan tat!")
-        self.label_tts_status.setText("San sang")
         self.label_status.setText("Da dich xong")
 
     def _on_translate_error(self, error: str):
@@ -1235,9 +1233,11 @@ class MainWindow(QMainWindow):
         """Xu ly khi TTS xong"""
         self.tts_audio_path = audio_path
         self.btn_tts.setEnabled(True)
-        self.btn_export.setEnabled(True)
+        # Chi enable export neu co video
+        if self.video_path:
+            self.btn_export.setEnabled(True)
+            self.label_export_status.setText("San sang xuat video!")
         self.label_tts_status.setText("Hoan tat!")
-        self.label_export_status.setText("San sang")
         self.label_status.setText(f"Da tao audio: {audio_path}")
 
     def _on_tts_error(self, error: str):
@@ -1387,13 +1387,15 @@ class MainWindow(QMainWindow):
                 update_progress(20)
 
                 intro_path = os.path.join(temp_dir, "intro.mp4")
+                # Intro TTS nhanh hon (1.3x) de khop voi video clip 1.3x
+                intro_tts_speed = 1.3
                 success = self.intro_generator.generate_intro(
                     self.video_path,
                     intro_text,
                     intro_path,
                     temp_dir,
                     voice=voice,
-                    speed=speed,
+                    speed=intro_tts_speed,
                     progress_callback=update_progress
                 )
 
